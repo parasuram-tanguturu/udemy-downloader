@@ -51,6 +51,7 @@ save_to_file = None
 load_from_file = None
 course_url = None
 info = None
+curriculum_only = False
 keys = {}
 id_as_course_name = False
 is_subscription_course = False
@@ -100,7 +101,7 @@ def parse_chapter_filter(chapter_str: str):
 
 # this is the first function that is called, we parse the arguments, setup the logger, and ensure that required directories exist
 def pre_run():
-    global dl_assets, dl_captions, dl_quizzes, skip_lectures, caption_locale, quality, bearer_token, course_name, keep_vtt, skip_hls, concurrent_downloads, load_from_file, save_to_file, bearer_token, course_url, info, logger, keys, id_as_course_name, LOG_LEVEL, use_h265, h265_crf, h265_preset, use_nvenc, browser, is_subscription_course, DOWNLOAD_DIR, use_continuous_lecture_numbers, chapter_filter
+    global dl_assets, dl_captions, dl_quizzes, skip_lectures, caption_locale, quality, bearer_token, course_name, keep_vtt, skip_hls, concurrent_downloads, load_from_file, save_to_file, bearer_token, course_url, info, curriculum_only, logger, keys, id_as_course_name, LOG_LEVEL, use_h265, h265_crf, h265_preset, use_nvenc, browser, is_subscription_course, DOWNLOAD_DIR, use_continuous_lecture_numbers, chapter_filter
 
     # make sure the logs directory exists
     if not os.path.exists(LOG_DIR_PATH):
@@ -184,6 +185,12 @@ def pre_run():
         dest="info",
         action="store_true",
         help="If specified, only course information will be printed, nothing will be downloaded",
+    )
+    parser.add_argument(
+        "--curriculum-only",
+        dest="curriculum_only",
+        action="store_true",
+        help="If specified, only generates curriculum.md file (fast, no detailed lecture parsing)",
     )
     parser.add_argument(
         "--id-as-course-name",
@@ -316,6 +323,8 @@ def pre_run():
         course_url = args.course_url
     if args.info:
         info = args.info
+    if args.curriculum_only:
+        curriculum_only = args.curriculum_only
     if args.use_h265:
         use_h265 = True
     if args.h265_crf:
@@ -937,6 +946,19 @@ class Udemy:
         else:
             return resp
 
+    def _get_course_details(self, course_id):
+        """Fetch detailed course info including instructor, objectives, prerequisites, etc."""
+        url = URLS.COURSE.format(portal_name=portal_name, course_id=course_id)
+        try:
+            resp = self.session._get(url, params=COURSE_INFO_PARAMS).json()
+            return resp
+        except conn_error as error:
+            logger.warning(f"Failed to fetch course details: {error}")
+            return {}
+        except Exception as e:
+            logger.warning(f"Failed to parse course details: {e}")
+            return {}
+
     def _extract_course_curriculum(self, url, course_id, portal_name):
         # self.session._headers.update({"Referer": url})
         url = URLS.CURRICULUM_ITEMS.format(portal_name=portal_name, course_id=course_id)
@@ -1036,6 +1058,18 @@ class Udemy:
 
         index = lecture.get("index")  # this is lecture_counter
         lecture_data = lecture.get("data")
+        
+        # Handle case where lecture_data is None
+        if lecture_data is None:
+            # Return lecture as-is if it's already parsed or has no data
+            return {
+                **lecture,
+                "assets": [],
+                "assets_count": 0,
+                "subtitle_count": 0,
+                "sources_count": 0,
+            }
+        
         asset = lecture_data.get("asset")
         supp_assets = lecture_data.get("supplementary_assets")
 
@@ -1683,6 +1717,246 @@ def process_coding_assignment(quiz, lecture, chapter_dir):
             f.write(html)
 
 
+def format_duration(seconds):
+    """Format seconds into MM:SS or HH:MM:SS format."""
+    if seconds is None or seconds == 0:
+        return "-"
+    try:
+        seconds = int(float(seconds))
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes}:{secs:02d}"
+    except (ValueError, TypeError):
+        return "-"
+
+
+def generate_curriculum_markdown(udemy: Udemy, udemy_object: dict, course_dir: str, course_id: int = None):
+    """
+    Generate a rich curriculum markdown file for the course with navigation and tables.
+    
+    Args:
+        udemy: Udemy API instance
+        udemy_object: Parsed course data structure
+        course_dir: Path to course output directory
+        course_id: Course ID for fetching additional details
+    """
+    try:
+        curriculum_path = os.path.join(course_dir, "curriculum.md")
+        
+        course_title = udemy_object.get("title") or udemy_object.get("course_title", "Unknown Course")
+        total_chapters = udemy_object.get("total_chapters", 0)
+        total_lectures = udemy_object.get("total_lectures", 0)
+        
+        # Fetch detailed course info if course_id is available
+        course_details = {}
+        if course_id:
+            logger.info("> Fetching course details for curriculum...")
+            course_details = udemy._get_course_details(course_id)
+        
+        chapters = udemy_object.get("chapters", [])
+        
+        # Filter chapters if filter is provided
+        filtered_chapters = []
+        for chapter in chapters:
+            current_chapter_index = int(chapter.get("chapter_index", 0))
+            if chapter_filter is not None and current_chapter_index not in chapter_filter:
+                continue
+            filtered_chapters.append(chapter)
+        
+        # Calculate total duration
+        total_duration_seconds = 0
+        for chapter in filtered_chapters:
+            for lecture in chapter.get("lectures", []):
+                data = lecture.get("data", {})
+                asset = data.get("asset", {}) if data else {}
+                duration = asset.get("time_estimation") or asset.get("length") or 0
+                try:
+                    total_duration_seconds += int(float(duration))
+                except (ValueError, TypeError):
+                    pass
+        
+        lines = []
+        
+        # === HEADER SECTION ===
+        lines.append(f"# {course_title}\n")
+        lines.append("\n")
+        
+        # Add headline if available
+        headline = course_details.get("headline", "")
+        if headline:
+            lines.append(f"> {headline}\n")
+            lines.append("\n")
+        
+        # === STATS TABLE ===
+        level = course_details.get("instructional_level", "")
+        content_info = course_details.get("content_info", "")
+        num_subscribers = course_details.get("num_subscribers", 0)
+        category = course_details.get("primary_category", {})
+        category_title = category.get("title", "") if isinstance(category, dict) else ""
+        
+        if level or content_info or num_subscribers:
+            lines.append("| Level | Duration | Subscribers | Category |\n")
+            lines.append("|:-----:|:--------:|:-----------:|:--------:|\n")
+            subscribers_str = f"{num_subscribers:,}" if num_subscribers else "-"
+            lines.append(f"| {level or '-'} | {content_info or '-'} | {subscribers_str} | {category_title or '-'} |\n")
+            lines.append("\n")
+        
+        # === INSTRUCTOR INFO ===
+        instructors = course_details.get("visible_instructors", [])
+        if instructors:
+            for instructor in instructors:
+                name = instructor.get("display_name", instructor.get("title", ""))
+                job_title = instructor.get("job_title", "")
+                rating = instructor.get("avg_rating_recent", 0)
+                if name:
+                    rating_str = f" | ⭐ {rating:.1f}" if rating else ""
+                    if job_title:
+                        lines.append(f"**Instructor:** {name} — *{job_title}*{rating_str}\n")
+                    else:
+                        lines.append(f"**Instructor:** {name}{rating_str}\n")
+                    lines.append("\n")
+                    
+                    # Add social links
+                    social_links = []
+                    if instructor.get("url_personal_website"):
+                        social_links.append(f"[🌐 Website]({instructor.get('url_personal_website')})")
+                    if instructor.get("url_linkedin"):
+                        social_links.append(f"[💼 LinkedIn]({instructor.get('url_linkedin')})")
+                    if instructor.get("url_twitter"):
+                        social_links.append(f"[𝕏 Twitter]({instructor.get('url_twitter')})")
+                    if instructor.get("url_youtube"):
+                        social_links.append(f"[▶️ YouTube]({instructor.get('url_youtube')})")
+                    if instructor.get("url_facebook"):
+                        social_links.append(f"[📘 Facebook]({instructor.get('url_facebook')})")
+                    if instructor.get("url_instagram"):
+                        social_links.append(f"[📷 Instagram]({instructor.get('url_instagram')})")
+                    if instructor.get("url_tiktok"):
+                        social_links.append(f"[🎵 TikTok]({instructor.get('url_tiktok')})")
+                    
+                    if social_links:
+                        lines.append(" | ".join(social_links) + "\n")
+                        lines.append("\n")
+        
+        lines.append("---\n")
+        lines.append("\n")
+        
+        # === LEARNING OBJECTIVES ===
+        objectives = course_details.get("objectives", [])
+        if objectives:
+            lines.append("## What You'll Learn\n")
+            lines.append("\n")
+            for obj in objectives:
+                lines.append(f"- {obj}\n")
+            lines.append("\n")
+        
+        # === PREREQUISITES ===
+        prerequisites = course_details.get("prerequisites", [])
+        if prerequisites:
+            lines.append("## Prerequisites\n")
+            lines.append("\n")
+            for prereq in prerequisites:
+                lines.append(f"- {prereq}\n")
+            lines.append("\n")
+        
+        # === TARGET AUDIENCE ===
+        target_audiences = course_details.get("target_audiences", [])
+        if target_audiences:
+            lines.append("## Who This Course Is For\n")
+            lines.append("\n")
+            for audience in target_audiences:
+                lines.append(f"- {audience}\n")
+            lines.append("\n")
+        
+        # Add separator before navigation if we had any course info sections
+        if objectives or prerequisites or target_audiences:
+            lines.append("---\n")
+            lines.append("\n")
+        
+        # === COURSE STATS SUMMARY ===
+        total_duration_str = format_duration(total_duration_seconds) if total_duration_seconds > 0 else ""
+        if total_duration_str and total_duration_str != "-":
+            lines.append(f"> **{len(filtered_chapters)} Chapters** | **{total_lectures} Lectures** | **{total_duration_str} Total**\n")
+        else:
+            lines.append(f"> **{len(filtered_chapters)} Chapters** | **{total_lectures} Lectures**\n")
+        lines.append("\n")
+        
+        # === QUICK NAVIGATION TABLE ===
+        lines.append("## Quick Navigation\n")
+        lines.append("\n")
+        lines.append("| # | Chapter | Lectures |\n")
+        lines.append("|:---:|---------|:--------:|\n")
+        
+        for idx, chapter in enumerate(filtered_chapters, 1):
+            chapter_title = chapter.get("chapter_title", "Unknown Chapter")
+            chapter_lectures = chapter.get("lectures", [])
+            lecture_count = len(chapter_lectures)
+            
+            # Create anchor link (lowercase, replace spaces with dashes)
+            anchor = chapter_title.lower().replace(" ", "-").replace(".", "")
+            
+            lines.append(f"| {idx} | [{chapter_title}](#{anchor}) | {lecture_count} |\n")
+        
+        lines.append("\n")
+        lines.append("---\n")
+        lines.append("\n")
+        
+        # === CHAPTER SECTIONS WITH LECTURE TABLES ===
+        for chapter in filtered_chapters:
+            chapter_title = chapter.get("chapter_title", "Unknown Chapter")
+            chapter_lectures = chapter.get("lectures", [])
+            lecture_count = len(chapter_lectures)
+            
+            lines.append(f"## {chapter_title}\n")
+            lines.append("\n")
+            lines.append(f"`{lecture_count} lectures`\n")
+            lines.append("\n")
+            
+            if lecture_count > 0:
+                # Table header with Type and Duration columns
+                lines.append("| # | Lecture | Type | Duration |\n")
+                lines.append("|:---:|---------|:----:|:--------:|\n")
+                
+                for idx, lecture in enumerate(chapter_lectures, 1):
+                    lecture_title = lecture.get("lecture_title", "Unknown Lecture")
+                    clazz = lecture.get("_class", "lecture")
+                    
+                    # Get asset data from the raw entry
+                    data = lecture.get("data", {})
+                    asset = data.get("asset", {}) if data else {}
+                    
+                    # Determine type
+                    if clazz == "quiz":
+                        lecture_type = "Quiz"
+                        duration_str = "-"
+                    else:
+                        asset_type = asset.get("asset_type", "Video") if asset else "Video"
+                        lecture_type = asset_type  # Video, Article, File, etc.
+                        
+                        # Get duration
+                        duration = asset.get("time_estimation") or asset.get("length") or 0
+                        duration_str = format_duration(duration)
+                    
+                    lines.append(f"| {idx} | {lecture_title} | {lecture_type} | {duration_str} |\n")
+            
+            lines.append("\n")
+            lines.append("---\n")
+            lines.append("\n")
+        
+        # Write markdown file
+        with open(curriculum_path, "w", encoding="utf-8") as f:
+            f.write("".join(lines))
+        
+        logger.info(f"> Curriculum markdown generated: {curriculum_path}")
+        
+    except Exception as e:
+        logger.warning(f"> Failed to generate curriculum markdown: {e}")
+        logger.exception("Curriculum markdown generation error")
+
+
 def parse_new(udemy: Udemy, udemy_object: dict):
     total_chapters = udemy_object.get("total_chapters")
     total_lectures = udemy_object.get("total_lectures")
@@ -1924,20 +2198,22 @@ def _print_course_info(udemy: Udemy, udemy_object: dict):
 
 def main():
     global bearer_token, portal_name
-    aria_ret_val = check_for_aria()
-    if not aria_ret_val:
-        logger.fatal("> Aria2c is missing from your system or path!")
-        sys.exit(1)
+    # Skip tool checks if we're only getting info (not downloading)
+    if not info and not curriculum_only:
+        aria_ret_val = check_for_aria()
+        if not aria_ret_val:
+            logger.fatal("> Aria2c is missing from your system or path!")
+            sys.exit(1)
 
-    ffmpeg_ret_val = check_for_ffmpeg()
-    if not ffmpeg_ret_val and not skip_lectures:
-        logger.fatal("> FFMPEG is missing from your system or path!")
-        sys.exit(1)
+        ffmpeg_ret_val = check_for_ffmpeg()
+        if not ffmpeg_ret_val and not skip_lectures:
+            logger.fatal("> FFMPEG is missing from your system or path!")
+            sys.exit(1)
 
-    shaka_ret_val = check_for_shaka()
-    if not shaka_ret_val and not skip_lectures:
-        logger.fatal("> Shaka Packager is missing from your system or path!")
-        sys.exit(1)
+        shaka_ret_val = check_for_shaka()
+        if not shaka_ret_val and not skip_lectures:
+            logger.fatal("> Shaka Packager is missing from your system or path!")
+            sys.exit(1)
 
     if load_from_file:
         logger.info("> 'load_from_file' was specified, data will be loaded from json files instead of fetched")
@@ -1966,8 +2242,17 @@ def main():
                 "authorization": f"Bearer {bearer_token}",
             }
         )
+    elif browser:
+        # Using browser cookies, headers will be set by cookies
+        logger.info("> Using browser cookies for authentication")
+        udemy.session._session.headers.update(
+            {
+                "x-udemyandroid-skip-local-cache": "true",
+                "cache-control": "no-cache",
+            }
+        )
     else:
-        logger.fatal("> use a bearer token")
+        logger.fatal("> use a bearer token or specify --browser")
         sys.exit(1)
 
     logger.info("> Fetching course information, this may take a minute...")
@@ -2014,7 +2299,14 @@ def main():
                 mode="r",
             ).read()
         )
-        if info:
+        if curriculum_only:
+            # Fast path: just generate curriculum markdown
+            course_name = str(udemy_object.get("course_id")) if id_as_course_name else udemy_object.get("course_title")
+            course_dir = os.path.join(DOWNLOAD_DIR, course_name)
+            if not os.path.exists(course_dir):
+                os.mkdir(course_dir)
+            generate_curriculum_markdown(udemy, udemy_object, course_dir, udemy_object.get("course_id"))
+        elif info:
             _print_course_info(udemy, udemy_object)
         else:
             parse_new(udemy, udemy_object)
@@ -2151,7 +2443,14 @@ def main():
                 f.write(json.dumps(udemy_object))
             logger.info("> Saved parsed data to json")
 
-        if info:
+        if curriculum_only:
+            # Fast path: just generate curriculum markdown
+            course_name = str(udemy_object.get("course_id")) if id_as_course_name else udemy_object.get("course_title")
+            course_dir = os.path.join(DOWNLOAD_DIR, course_name)
+            if not os.path.exists(course_dir):
+                os.mkdir(course_dir)
+            generate_curriculum_markdown(udemy, udemy_object, course_dir, udemy_object.get("course_id"))
+        elif info:
             _print_course_info(udemy, udemy_object)
         else:
             parse_new(udemy, udemy_object)

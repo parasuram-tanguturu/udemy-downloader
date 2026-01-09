@@ -42,13 +42,20 @@ CURRICULUM_ITEMS_PARAMS = {
     "fields[quiz]": "title,object_index,type",
     "fields[practice]": "title,object_index",
     "fields[chapter]": "title,object_index",
-    "fields[asset]": "title,filename,asset_type,status,is_external,media_license_token,course_is_drmed,media_sources,captions,slides,slide_urls,download_urls,external_url,stream_urls,@min,status,delayed_asset_message,processing_errors,body",
+    "fields[asset]": "title,filename,asset_type,status,is_external,media_license_token,course_is_drmed,media_sources,captions,slides,slide_urls,download_urls,external_url,stream_urls,@min,status,delayed_asset_message,processing_errors,body,time_estimation,length",
     "caching_intent": True,
     "page_size": "200",
 }
 
 COURSE_URL_PARAMS = {
     "fields[course]": "title",
+    "use_remote_version": True,
+    "caching_intent": True,
+}
+
+COURSE_INFO_PARAMS = {
+    "fields[course]": "title,headline,description,instructional_level,content_info,content_length_video,num_subscribers,visible_instructors,objectives,prerequisites,target_audiences,primary_category,primary_subcategory",
+    "fields[user]": "title,display_name,job_title,avg_rating_recent,url_personal_website,url_linkedin,url_twitter,url_youtube,url_facebook,url_instagram,url_tiktok",
     "use_remote_version": True,
     "caching_intent": True,
 }

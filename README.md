@@ -101,7 +101,7 @@ You can now run the program, see the examples below. The course will download to
 
 ```
 usage: main.py [-h] -c COURSE_URL [-b BEARER_TOKEN] [-q QUALITY] [-l LANG] [-cd CONCURRENT_DOWNLOADS] [--skip-lectures] [--download-assets]
-               [--download-captions] [--download-quizzes] [--keep-vtt] [--skip-hls] [--info] [--id-as-course-name] [-sc] [--save-to-file] [--load-from-file]
+               [--download-captions] [--download-quizzes] [--keep-vtt] [--skip-hls] [--info] [--curriculum-only] [--id-as-course-name] [-sc] [--save-to-file] [--load-from-file]
                [--log-level LOG_LEVEL] [--browser {chrome,firefox,opera,edge,brave,chromium,vivaldi,safari}] [--use-h265] [--h265-crf H265_CRF] [--h265-preset H265_PRESET]
                [--use-nvenc] [--out OUT] [--continue-lecture-numbers]
                [--chapter CHAPTER_FILTER_RAW]
@@ -127,6 +127,7 @@ options:
   --keep-vtt            If specified, .vtt files won't be removed
   --skip-hls            If specified, hls streams will be skipped (faster fetching) (hls streams usually contain 1080p quality for non-drm lectures)
   --info                If specified, only course information will be printed, nothing will be downloaded
+  --curriculum-only     If specified, only generates curriculum.md file (fast, no detailed lecture parsing)
   --id-as-course-name   If specified, the course id will be used in place of the course name for the output directory. This is a 'hack' to reduce the path length
   -sc, --subscription-course
                         Mark the course as a subscription based course, use this if you are having problems with the program auto detecting it
@@ -177,6 +178,8 @@ options:
     -   `python main.py -c <Course URL> --skip-hls`
 -   Print course information only:
     -   `python main.py -c <Course URL> --info`
+-   Generate curriculum markdown only (fast):
+    -   `python main.py -c <Course URL> --curriculum-only`
 -   Specify max number of concurrent downloads:
     -   `python main.py -c <Course URL> --concurrent-downloads 20`
     -   `python main.py -c <Course URL> -cd 20`

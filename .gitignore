@@ -120,6 +120,7 @@ out_dir/
 working_dir/
 manifest.mpd
 .vscode
+.history
 saved/
 *.aria2
 info.py
