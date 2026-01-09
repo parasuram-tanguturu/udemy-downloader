@@ -97,6 +97,39 @@ The program can automatically extract them from your browser. You can specify wh
 
 You can now run the program, see the examples below. The course will download to `out_dir`.
 
+## Interactive Mode
+
+For an easier, menu-driven experience, use the interactive wrapper:
+
+```bash
+python3 interactive_udemy.py
+```
+
+Or set up an alias in your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+# For zsh
+udemy() {
+    cd /path/to/udemy-downloader && source venv/bin/activate && python3 interactive_udemy.py "$@"
+}
+
+# Then reload your shell: source ~/.zshrc
+```
+
+The interactive mode provides:
+- Menu-driven interface for selecting download options
+- Step-by-step prompts for course URL, authentication, and settings
+- Helpful instructions for getting bearer token from browser cookies
+- Automatic output directory detection and display
+- Option to open output directory in Finder (macOS)
+
+**Note**: The bearer token is the same as the `access_token` cookie value. To get it:
+1. Open Udemy in your browser
+2. Open Developer Tools (F12 or Cmd+Option+I)
+3. Go to "Application" tab (Chrome) or "Storage" tab (Firefox)
+4. Expand "Cookies" > select your Udemy domain
+5. Find `access_token` cookie and copy its Value
+
 # Advanced Usage
 
 ```

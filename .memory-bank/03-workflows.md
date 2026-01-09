@@ -1,5 +1,31 @@
 # Key Workflows
 
+## Interactive Workflow
+
+The `interactive_udemy.py` wrapper provides a user-friendly menu-driven interface:
+
+1. **Main Action Selection**
+   - Generate curriculum only (default)
+   - Download course
+   - View course info only
+
+2. **Authentication Selection**
+   - Bearer token (with instructions for getting from browser cookies)
+   - Browser cookies (automatic extraction)
+   - Skip (use .env file)
+
+3. **Download Options** (if downloading)
+   - Lectures, captions, assets, quizzes
+   - Quality, language, output directory
+   - Advanced options (H.265, chapter filtering, etc.)
+
+4. **Execution & Output**
+   - Executes `main.py` with constructed arguments
+   - Displays output directory path
+   - Optionally opens directory in Finder (macOS)
+
+**Usage**: Run `python3 interactive_udemy.py` or use the `udemy` alias if configured.
+
 ## Authentication Flow
 
 > **📖 For detailed authentication documentation, see [07-authentication.md](./07-authentication.md)**
@@ -8,6 +34,9 @@
    - Bearer token can be provided via:
      - Command-line argument (`-b` or `--bearer`)
      - Environment variable (`UDEMY_BEARER` in `.env`)
+     - Interactive prompt (in interactive mode)
+   - **Note**: Bearer token = `access_token` cookie value from browser
+     - Get it from Developer Tools > Application > Cookies > `access_token`
    - Cookies can be extracted from browser using `--browser` flag
    - Supported browsers: chrome, firefox, opera, edge, brave, chromium, vivaldi, safari
    - Cookie file support (Netscape format)
@@ -172,22 +201,6 @@ Use `--curriculum-only` flag for fast curriculum generation without detailed lec
 
 ```bash
 python main.py -c <Course URL> -b <token> --curriculum-only
-```
-
-This generates a simple checklist format in ~4 seconds:
-
-```markdown
-# Course Title
-
-**Chapters:** 9 | **Lectures:** 69
-
----
-
-## Chapter Name
-
-- [ ] Lecture 1 Title
-- [ ] Lecture 2 Title
-- [ ] Quiz Title *(Quiz)*
 ```
 
 ### Detailed Mode (with `--info` or during download)

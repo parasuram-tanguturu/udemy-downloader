@@ -2,6 +2,29 @@
 
 ## Core Files
 
+### `interactive_udemy.py` (470 lines)
+
+**Purpose**: Interactive menu-driven wrapper for the Udemy downloader
+
+**Key Features**:
+
+- Menu-driven interface for selecting download options
+- Step-by-step prompts for all configuration options
+- Dependency checking before execution
+- Output directory detection and display
+- Graceful Ctrl+C handling
+- Instructions for getting bearer token from browser cookies
+
+**Key Functions**:
+
+- `check_dependencies()`: Verifies required Python packages are installed
+- `get_menu_choice()`: Displays menu and gets user selection
+- `get_user_input()`: Gets user input with optional defaults
+- `get_yes_no()`: Gets yes/no input with default
+- `build_arguments()`: Constructs command-line arguments from user selections
+- `find_actual_output_directory()`: Locates the output directory after execution
+- `main()`: Main interactive workflow
+
 ### `main.py` (2165 lines)
 
 **Purpose**: Main application entry point and core logic
@@ -129,6 +152,7 @@
 ### `out_dir/{Course Name}/curriculum.md`
 
 **Purpose**: Comprehensive course curriculum documentation in markdown format
+
 - Automatically generated during course processing
 - Contains full course metadata (title, ID, chapter/lecture counts)
 - Lists all chapters with lecture details
