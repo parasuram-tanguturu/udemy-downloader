@@ -316,12 +316,15 @@ def main():
         selections['bearer_token'] = get_user_input("Bearer token (access_token from cookies)", required=True)
     elif auth_choice == 2:
         browser_choice = get_menu_choice(
-            "Select browser:",
-            ["chrome", "firefox", "opera", "edge", "brave", "chromium", "vivaldi", "safari"],
+            "Select browser (or 'file' to use cookies from file):",
+            ["chrome", "firefox", "opera", "edge", "brave", "chromium", "vivaldi", "safari", "file"],
             default=1
         )
-        browsers = ["chrome", "firefox", "opera", "edge", "brave", "chromium", "vivaldi", "safari"]
+        browsers = ["chrome", "firefox", "opera", "edge", "brave", "chromium", "vivaldi", "safari", "file"]
         selections['browser'] = browsers[browser_choice - 1]
+        if selections['browser'] == 'file':
+            print("\nNOTE: When using 'file', cookies should be in Netscape format")
+            print("and saved as 'cookies.txt' in the project directory.")
     
     # If downloading, get download options
     if selections['action'] == 'download':
