@@ -1785,6 +1785,12 @@ def generate_curriculum_markdown(udemy: Udemy, udemy_object: dict, course_dir: s
         lines.append(f"# {course_title}\n")
         lines.append("\n")
         
+        # Add course URL if available
+        global course_url
+        if course_url:
+            lines.append(f"**Course URL:** [{course_url}]({course_url})\n")
+            lines.append("\n")
+        
         # Add headline if available
         headline = course_details.get("headline", "")
         if headline:
